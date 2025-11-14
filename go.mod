@@ -1,0 +1,7 @@
+module github.com/BoomerangMessaging/system-events-client
+
+go 1.25.3
+
+require github.com/wagslane/go-rabbitmq v0.15.0
+
+require github.com/rabbitmq/amqp091-go v1.10.0 // indirect
