@@ -1,0 +1,29 @@
+# CODEOWNERS for BoomerangMessaging/system-events-client
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+#
+# Format:
+# <pattern> <owner1> <owner2> ...
+# Owners can be individual users (@username) or teams within an organization (@org/team-name)
+
+# Default owner for everything in the repository
+* @BoomerangMessaging
+
+# Owners for common paths (adjust team/user names if you have org teams)
+# Source code
+/src/ @BoomerangMessaging
+
+# Config & build files
+/package.json @BoomerangMessaging
+/tsconfig*.json @BoomerangMessaging
+
+# Docs and CI
+/docs/ @BoomerangMessaging
+.github/ @BoomerangMessaging
+
+# Examples / tests
+/examples/ @BoomerangMessaging
+/tests/ @BoomerangMessaging
+
+# Uncomment and customize these example entries if you maintain separate teams:
+# /api/ @BoomerangMessaging/api-team
+# *.md @BoomerangMessaging/docs-team
