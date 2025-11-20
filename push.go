@@ -72,12 +72,12 @@ func (pc *PushClient) SendEvent(ctx context.Context, event *Event) error {
 		return nil
 	}
 
-	if event.UniqueKey == "" {
-		event.GenerateUniqueKey()
-	}
-
 	if event.Namespace == "" {
 		event.Namespace = pc.namespace
+	}
+
+	if event.UniqueKey == "" {
+		event.GenerateUniqueKey()
 	}
 
 	slog.Debug("sending_event", "event", event)
