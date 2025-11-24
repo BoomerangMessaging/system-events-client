@@ -39,6 +39,17 @@ func (e *Event) GenerateUniqueKey() {
 		e.Namespace, e.App, e.Event, e.ResourceType,
 		rand.Intn(10000), time.Now().UnixNano(),
 	)
+
+	// make sure that UniqueKey is not longer than 64 characters
+	if len(e.UniqueKey) > 64 {
+		// shuffle string and truncate
+		shuffled := []rune(e.UniqueKey)
+		rand.Shuffle(len(shuffled), func(i, j int) {
+			shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+		})
+
+		e.UniqueKey = string(shuffled)[:64]
+	}
 }
 
 // namespace - prod/staging/dev/mps
