@@ -37,7 +37,7 @@ type Event struct {
 func (e *Event) GenerateUniqueKey() {
 	e.UniqueKey = fmt.Sprintf("%s:%s:%s:%s:%d:%d",
 		e.Namespace, e.App, e.Event, e.ResourceType,
-		rand.Intn(10000), time.Now().UnixNano(),
+		rand.Intn(1000), time.Now().UnixNano(),
 	)
 
 	// make sure that UniqueKey is not longer than 64 characters
