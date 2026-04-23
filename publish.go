@@ -42,9 +42,6 @@ func (w *Worker) PublishWithContext(ctx context.Context, data []byte, routingKey
 	if len(routingKeys) == 0 {
 		return fmt.Errorf("at least one routing key must be provided")
 	}
-	if ctx == nil {
-		return fmt.Errorf("context must not be nil")
-	}
 
 	publisher, err := w.createPublisher()
 	if err != nil {

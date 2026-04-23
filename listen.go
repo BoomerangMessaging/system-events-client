@@ -25,10 +25,10 @@ func (w *Worker) Close() error {
 	}
 
 	w.publisherMutex.Lock()
+	defer w.publisherMutex.Unlock()
 	if w.publisher != nil {
 		w.publisher.Close()
 	}
-	w.publisherMutex.Unlock()
 
 	return w.conn.Close()
 }
