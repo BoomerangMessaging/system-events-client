@@ -8,11 +8,11 @@ import (
 )
 
 type Worker struct {
-	conn        *rabbitmq.Conn
-	consumer    *rabbitmq.Consumer
-	publisher   *rabbitmq.Publisher
-	exchange    string
-	publisherMu sync.Mutex
+	conn           *rabbitmq.Conn
+	consumer       *rabbitmq.Consumer
+	publisher      *rabbitmq.Publisher
+	publisherMutex sync.Mutex
+	exchange       string
 }
 
 // Close consumer and connection.
@@ -23,9 +23,13 @@ func (w *Worker) Close() error {
 	if w.consumer != nil {
 		w.consumer.Close()
 	}
+
+	w.publisherMutex.Lock()
 	if w.publisher != nil {
 		w.publisher.Close()
 	}
+	w.publisherMutex.Unlock()
+
 	return w.conn.Close()
 }
 

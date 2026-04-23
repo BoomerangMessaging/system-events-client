@@ -9,8 +9,8 @@ import (
 )
 
 func (w *Worker) createPublisher() (*rabbitmq.Publisher, error) {
-	w.publisherMu.Lock()
-	defer w.publisherMu.Unlock()
+	w.publisherMutex.Lock()
+	defer w.publisherMutex.Unlock()
 
 	if w.publisher != nil {
 		return w.publisher, nil
@@ -43,7 +43,7 @@ func (w *Worker) PublishWithContext(ctx context.Context, data []byte, routingKey
 		return fmt.Errorf("at least one routing key must be provided")
 	}
 	if ctx == nil {
-		ctx = context.Background()
+		return fmt.Errorf("context must not be nil")
 	}
 
 	publisher, err := w.createPublisher()
@@ -58,7 +58,11 @@ func (w *Worker) PublishWithContext(ctx context.Context, data []byte, routingKey
 	return publisher.PublishWithContext(ctx, data, routingKeys, options...)
 }
 
-func (w *Worker) PublishJSON(ctx context.Context, payload any, routingKeys []string, optionFuncs ...func(*rabbitmq.PublishOptions)) error {
+func (w *Worker) PublishJSON(payload any, routingKeys []string, optionFuncs ...func(*rabbitmq.PublishOptions)) error {
+	return w.PublishJSONWithContext(context.Background(), payload, routingKeys, optionFuncs...)
+}
+
+func (w *Worker) PublishJSONWithContext(ctx context.Context, payload any, routingKeys []string, optionFuncs ...func(*rabbitmq.PublishOptions)) error {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return err
