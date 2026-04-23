@@ -19,13 +19,7 @@ func (w *Worker) createPublisher() (*rabbitmq.Publisher, error) {
 		return nil, fmt.Errorf("worker connection is not initialized")
 	}
 
-	publisher, err := rabbitmq.NewPublisher(
-		w.conn,
-		rabbitmq.WithPublisherOptionsExchangeName(w.exchange),
-		rabbitmq.WithPublisherOptionsExchangeKind("topic"),
-		rabbitmq.WithPublisherOptionsExchangeDeclare,
-		rabbitmq.WithPublisherOptionsExchangeDurable,
-	)
+	publisher, err := rabbitmq.NewPublisher(w.conn)
 	if err != nil {
 		return nil, err
 	}
@@ -48,11 +42,7 @@ func (w *Worker) PublishWithContext(ctx context.Context, data []byte, routingKey
 		return err
 	}
 
-	options := append([]func(*rabbitmq.PublishOptions){
-		rabbitmq.WithPublishOptionsExchange(w.exchange),
-	}, optionFuncs...)
-
-	return publisher.PublishWithContext(ctx, data, routingKeys, options...)
+	return publisher.PublishWithContext(ctx, data, routingKeys, optionFuncs...)
 }
 
 func (w *Worker) PublishJSON(payload any, routingKeys []string, optionFuncs ...func(*rabbitmq.PublishOptions)) error {
