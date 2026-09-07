@@ -148,135 +148,169 @@ func (e *Event) GenerateUniqueKey() {
 
 // namespace - prod/staging/dev/mps
 // app - ui/gateway/contacts/reporting/logic/carrier
-func CreatePushClient(timeout time.Duration, baseUrl, namespace, appName string) *PushClient {
+// An optional RetryConfig enables retries for transient delivery failures.
+func CreatePushClient(timeout time.Duration, baseURL, namespace, appName string, retryConfigs ...RetryConfig) *PushClient {
 	if timeout <= 0 {
 		timeout = 5 * time.Second
 	}
 
-	return &PushClient{
-		baseURL:   strings.TrimRight(strings.TrimSpace(baseUrl), "/"),
-		timeout:   timeout,
-		namespace: namespace,
-		app:       appName,
+	retryConfig := RetryConfig{}
+	if len(retryConfigs) > 0 {
+		retryConfig = retryConfigs[0].normalized()
 	}
+
+	return &PushClient{
+		baseURL:     strings.TrimRight(strings.TrimSpace(baseURL), "/"),
+		timeout:     timeout,
+		namespace:   namespace,
+		app:         appName,
+		retryConfig: retryConfig,
+	}
+}
+
+// RetryConfig controls retry behavior for transient push delivery failures.
+// MaxRetries is the number of attempts after the initial request. A zero value
+// disables retries. InitialBackoff and MaxBackoff default to 100ms and 5s when
+// retries are enabled and their respective values are not positive.
+type RetryConfig struct {
+	MaxRetries     int
+	InitialBackoff time.Duration
+	MaxBackoff     time.Duration
+}
+
+func (rc RetryConfig) normalized() RetryConfig {
+	if rc.MaxRetries <= 0 {
+		return RetryConfig{}
+	}
+	if rc.InitialBackoff <= 0 {
+		rc.InitialBackoff = 100 * time.Millisecond
+	}
+	if rc.MaxBackoff <= 0 {
+		rc.MaxBackoff = 5 * time.Second
+	}
+	if rc.MaxBackoff < rc.InitialBackoff {
+		rc.MaxBackoff = rc.InitialBackoff
+	}
+	return rc
 }
 
 type PushClient struct {
-	// Add fields if necessary
-	baseURL   string
-	timeout   time.Duration
-	namespace string
-	app       string
+	baseURL     string
+	timeout     time.Duration
+	namespace   string
+	app         string
+	retryConfig RetryConfig
 }
 
 func (pc *PushClient) SendEvent(ctx context.Context, event *Event) error {
-
-	// Implement the logic to send the event to the external system
-	if pc.baseURL == "" {
-		slog.Info("push_client_base_url_is_empty_skipping_event_send", "event", event)
-		return nil
-	}
-
-	if event.Namespace == "" {
-		event.Namespace = pc.namespace
-	}
-
-	if event.UniqueKey == "" {
-		event.GenerateUniqueKey()
-	}
-
-	slog.Debug("sending_event", "event", event)
-	// marshal event to JSON
-	// send HTTP POST request to pc.baseURL with the event data
-	bytesBuffer := &bytes.Buffer{}
-	err := json.NewEncoder(bytesBuffer).Encode(event)
-	if err != nil {
-		slog.Error("failed_to_marshal_event_to_json", "err", err)
-		return err
-	}
-
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, pc.timeout)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctxWithTimeout, "POST", pc.baseURL+"/events", bytesBuffer)
-	if err != nil {
-		slog.Error("failed_to_create_http_request", "err", err)
-		return err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		slog.Error("failed_to_send_http_request", "err", err)
-		return err
-	}
-
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		body, err2 := io.ReadAll(resp.Body)
-		if err2 != nil {
-			slog.Error("failed_to_read_response_body", "err", err2)
-		}
-
-		slog.Error("received_non_ok_response", "status_code", resp.StatusCode, "body", string(body))
-		return fmt.Errorf("non-ok response: %d", resp.StatusCode)
-	}
-
-	slog.Info("event_sent_successfully", "event", event.UniqueKey)
-	return nil
+	return pc.send(ctx, event, "/events", "event")
 }
 
 func (pc *PushClient) SendNotification(ctx context.Context, event *Event) error {
+	return pc.send(ctx, event, "/notifications", "notification")
+}
 
-	// Implement the logic to send the event to the external system
+func (pc *PushClient) send(ctx context.Context, event *Event, endpoint, kind string) error {
 	if pc.baseURL == "" {
-		slog.Info("push_client_base_url_is_empty_skipping_event_send", "event", event)
+		slog.Info("push_client_base_url_is_empty_skipping_send", "kind", kind, "event", event)
 		return nil
 	}
 
+	if event == nil {
+		return fmt.Errorf("event must not be nil")
+	}
 	if event.Namespace == "" {
 		event.Namespace = pc.namespace
 	}
-
+	if event.App == "" {
+		event.App = pc.app
+	}
 	if event.UniqueKey == "" {
 		event.GenerateUniqueKey()
 	}
 
-	slog.Debug("sending_notification", "event", event)
-	// marshal event to JSON
-	// send HTTP POST request to pc.baseURL with the event data
-	bytesBuffer := &bytes.Buffer{}
-	err := json.NewEncoder(bytesBuffer).Encode(event)
+	slog.Debug("sending_push", "kind", kind, "event", event)
+	payload, err := json.Marshal(event)
 	if err != nil {
 		slog.Error("failed_to_marshal_event_to_json", "err", err)
 		return err
 	}
 
-	ctxWithTimeout, cancel := context.WithTimeout(ctx, pc.timeout)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctxWithTimeout, "POST", pc.baseURL+"/notifications", bytesBuffer)
-	if err != nil {
-		slog.Error("failed_to_create_http_request", "err", err)
-		return err
+	var lastErr error
+	for attempt := 0; attempt <= pc.retryConfig.MaxRetries; attempt++ {
+		if attempt > 0 {
+			delay := pc.retryDelay(attempt)
+			slog.Warn("retrying_push", "kind", kind, "attempt", attempt+1, "delay", delay, "err", lastErr)
+			if err := waitForRetry(ctx, delay); err != nil {
+				return err
+			}
+		}
+
+		retryable, err := pc.doRequest(ctx, endpoint, payload)
+		if err == nil {
+			slog.Info("push_sent_successfully", "kind", kind, "event", event.UniqueKey, "attempt", attempt+1)
+			return nil
+		}
+		if !retryable || attempt == pc.retryConfig.MaxRetries {
+			return err
+		}
+		lastErr = err
 	}
 
+	return lastErr
+}
+
+func (pc *PushClient) doRequest(ctx context.Context, endpoint string, payload []byte) (bool, error) {
+	requestCtx, cancel := context.WithTimeout(ctx, pc.timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(requestCtx, http.MethodPost, pc.baseURL+endpoint, bytes.NewReader(payload))
+	if err != nil {
+		slog.Error("failed_to_create_http_request", "err", err)
+		return false, err
+	}
 	req.Header.Set("Content-Type", "application/json")
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		slog.Error("failed_to_send_http_request", "err", err)
-		return err
+		return true, err
 	}
-
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		body, err2 := io.ReadAll(resp.Body)
-		if err2 != nil {
-			slog.Error("failed_to_read_response_body", "err", err2)
-		}
 
-		slog.Error("received_non_ok_response", "status_code", resp.StatusCode, "body", string(body))
-		return fmt.Errorf("non-ok response: %d", resp.StatusCode)
+	if resp.StatusCode == http.StatusOK {
+		return false, nil
 	}
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		slog.Error("failed_to_read_response_body", "err", readErr)
+	}
+	err = fmt.Errorf("non-ok response: %d", resp.StatusCode)
+	slog.Error("received_non_ok_response", "status_code", resp.StatusCode, "body", string(body))
+	return resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= http.StatusInternalServerError, err
+}
 
-	slog.Info("notification_sent_successfully", "event", event.UniqueKey)
-	return nil
+func (pc *PushClient) retryDelay(attempt int) time.Duration {
+	delay := pc.retryConfig.InitialBackoff
+	for retry := 1; retry < attempt && delay < pc.retryConfig.MaxBackoff; retry++ {
+		if delay > pc.retryConfig.MaxBackoff/2 {
+			return pc.retryConfig.MaxBackoff
+		}
+		delay *= 2
+	}
+	if delay > pc.retryConfig.MaxBackoff {
+		return pc.retryConfig.MaxBackoff
+	}
+	return delay
+}
+
+func waitForRetry(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
