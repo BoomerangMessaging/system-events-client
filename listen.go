@@ -12,6 +12,7 @@ type Worker struct {
 	consumer       *rabbitmq.Consumer
 	publisher      *rabbitmq.Publisher
 	publisherMutex sync.Mutex
+	closed         bool
 	exchange       string
 }
 
@@ -25,6 +26,14 @@ func (w *Worker) Close() error {
 	}
 
 	w.publisherMutex.Lock()
+	if w.closed {
+		w.publisherMutex.Unlock()
+		if w.conn == nil {
+			return nil
+		}
+		return w.conn.Close()
+	}
+	w.closed = true
 	publisher := w.publisher
 	w.publisher = nil
 	w.publisherMutex.Unlock()
@@ -32,7 +41,9 @@ func (w *Worker) Close() error {
 	if publisher != nil {
 		publisher.Close()
 	}
-
+	if w.conn == nil {
+		return nil
+	}
 	return w.conn.Close()
 }
 

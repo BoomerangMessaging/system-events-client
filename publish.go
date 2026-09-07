@@ -12,6 +12,9 @@ func (w *Worker) createPublisher() (*rabbitmq.Publisher, error) {
 	w.publisherMutex.Lock()
 	defer w.publisherMutex.Unlock()
 
+	if w.closed {
+		return nil, fmt.Errorf("worker is closed")
+	}
 	if w.publisher != nil {
 		return w.publisher, nil
 	}
