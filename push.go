@@ -37,7 +37,95 @@ type Event struct {
 	// event is addressed to this email
 	Email string `json:"email"`
 	// front-end or source of the event
-	Info string `json:"info"`
+	Info      string    `json:"info"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+func (e *Event) UnmarshalJSON(data []byte) error {
+	type eventAlias struct {
+		UniqueKey    string          `json:"unique_key"`
+		Namespace    string          `json:"namespace"`
+		App          string          `json:"app"`
+		Event        string          `json:"event"`
+		ResourceType string          `json:"resource_type"`
+		ResourceID   string          `json:"resource_id"`
+		CustomerID   string          `json:"customer_id"`
+		ClientID     string          `json:"client_id"`
+		Level        string          `json:"level"`
+		Message      json.RawMessage `json:"message"`
+		CountMinutes int             `json:"count_minutes"`
+		Channels     []string        `json:"channels"`
+		DoNotStore   bool            `json:"do_not_store"`
+		Email        string          `json:"email"`
+		Info         string          `json:"info"`
+		CreatedAt    json.RawMessage `json:"created_at"`
+	}
+
+	var aux eventAlias
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	e.UniqueKey = aux.UniqueKey
+	e.Namespace = aux.Namespace
+	e.App = aux.App
+	e.Event = aux.Event
+	e.ResourceType = aux.ResourceType
+	e.ResourceID = aux.ResourceID
+	e.CustomerID = aux.CustomerID
+	e.ClientID = aux.ClientID
+	e.Level = aux.Level
+	e.Message = aux.Message
+	e.CountMinutes = aux.CountMinutes
+	e.Channels = aux.Channels
+	e.DoNotStore = aux.DoNotStore
+	e.Email = aux.Email
+	e.Info = aux.Info
+
+	if len(aux.CreatedAt) == 0 || string(aux.CreatedAt) == "null" {
+		e.CreatedAt = time.Time{}
+		return nil
+	}
+
+	var createdAt time.Time
+	if err := json.Unmarshal(aux.CreatedAt, &createdAt); err == nil {
+		e.CreatedAt = createdAt
+		return nil
+	}
+
+	var createdAtStr string
+	if err := json.Unmarshal(aux.CreatedAt, &createdAtStr); err == nil && createdAtStr != "" {
+		layouts := []string{
+			time.RFC3339Nano,
+			time.RFC3339,
+			"2006-01-02 15:04:05",
+			"2006-01-02 15:04:05.999999999",
+			"2006-01-02T15:04:05",
+			"2006-01-02T15:04:05.999999999",
+			"2006-01-02 15:04:05Z07:00",
+		}
+		for _, layout := range layouts {
+			parsed, err := time.Parse(layout, createdAtStr)
+			if err == nil {
+				e.CreatedAt = parsed
+				return nil
+			}
+		}
+	}
+
+	var unixSeconds int64
+	if err := json.Unmarshal(aux.CreatedAt, &unixSeconds); err == nil {
+		e.CreatedAt = time.Unix(unixSeconds, 0)
+		return nil
+	}
+
+	var unixMilliseconds int64
+	if err := json.Unmarshal(aux.CreatedAt, &unixMilliseconds); err == nil && unixMilliseconds > 1e12 {
+		e.CreatedAt = time.UnixMilli(unixMilliseconds)
+		return nil
+	}
+
+	return fmt.Errorf("invalid created_at value: %s", string(aux.CreatedAt))
 }
 
 func (e *Event) GenerateUniqueKey() {
