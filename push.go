@@ -34,8 +34,10 @@ type Event struct {
 	CountMinutes int      `json:"count_minutes"`
 	Channels     []string `json:"channels"`
 	DoNotStore   bool     `json:"do_not_store"`
-	// event is addressed to this email
+	// who is responsible for the event
 	Email string `json:"email"`
+	// event is addressed to this emails
+	ToEmails []string `json:"to_emails"`
 	// front-end or source of the event
 	Info      string    `json:"info"`
 	CreatedAt time.Time `json:"created_at"`
