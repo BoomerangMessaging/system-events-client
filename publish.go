@@ -41,6 +41,11 @@ func (w *Worker) PublishQueueWithContext(ctx context.Context, data []byte, queue
 	if len(queueNames) == 0 {
 		return fmt.Errorf("at least one queue name must be provided")
 	}
+	for _, queueName := range queueNames {
+		if queueName == "" {
+			return fmt.Errorf("queue name must be provided")
+		}
+	}
 
 	publisher, err := w.createPublisher()
 	if err != nil {
