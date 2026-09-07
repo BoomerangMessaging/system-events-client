@@ -2,13 +2,17 @@ package systemeventslisten
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/wagslane/go-rabbitmq"
 )
 
 type Worker struct {
-	conn     *rabbitmq.Conn
-	consumer *rabbitmq.Consumer
+	conn           *rabbitmq.Conn
+	consumer       *rabbitmq.Consumer
+	publisher      *rabbitmq.Publisher
+	publisherMutex sync.Mutex
+	closed         bool
 }
 
 // Close consumer and connection.
@@ -16,8 +20,28 @@ type Worker struct {
 // to ensure all messages are properly acknowledged and resources are released.
 // This will block until all pending messages are processed.
 func (w *Worker) Close() error {
-	w.consumer.Close()
-	return w.conn.Close()
+	w.publisherMutex.Lock()
+	if w.closed {
+		w.publisherMutex.Unlock()
+		return nil
+	}
+	w.closed = true
+	consumer := w.consumer
+	publisher := w.publisher
+	w.publisher = nil
+	conn := w.conn
+	w.publisherMutex.Unlock()
+
+	if consumer != nil {
+		consumer.Close()
+	}
+	if publisher != nil {
+		publisher.Close()
+	}
+	if conn == nil {
+		return nil
+	}
+	return conn.Close()
 }
 
 func (w *Worker) Run(handler func(d rabbitmq.Delivery) rabbitmq.Action) error {
