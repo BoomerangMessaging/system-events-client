@@ -20,30 +20,28 @@ type Worker struct {
 // to ensure all messages are properly acknowledged and resources are released.
 // This will block until all pending messages are processed.
 func (w *Worker) Close() error {
-	if w.consumer != nil {
-		w.consumer.Close()
-	}
-
 	w.publisherMutex.Lock()
 	if w.closed {
 		w.publisherMutex.Unlock()
-		if w.conn == nil {
-			return nil
-		}
-		return w.conn.Close()
+		return nil
 	}
 	w.closed = true
+	consumer := w.consumer
 	publisher := w.publisher
 	w.publisher = nil
+	conn := w.conn
 	w.publisherMutex.Unlock()
 
+	if consumer != nil {
+		consumer.Close()
+	}
 	if publisher != nil {
 		publisher.Close()
 	}
-	if w.conn == nil {
+	if conn == nil {
 		return nil
 	}
-	return w.conn.Close()
+	return conn.Close()
 }
 
 func (w *Worker) Run(handler func(d rabbitmq.Delivery) rabbitmq.Action) error {
