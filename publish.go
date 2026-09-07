@@ -11,7 +11,10 @@ import (
 func (w *Worker) createPublisher() (*rabbitmq.Publisher, error) {
 	w.publisherMutex.Lock()
 	defer w.publisherMutex.Unlock()
+	return w.createPublisherLocked()
+}
 
+func (w *Worker) createPublisherLocked() (*rabbitmq.Publisher, error) {
 	if w.closed {
 		return nil, fmt.Errorf("worker is closed")
 	}
@@ -47,7 +50,9 @@ func (w *Worker) PublishQueueWithContext(ctx context.Context, data []byte, queue
 		}
 	}
 
-	publisher, err := w.createPublisher()
+	w.publisherMutex.Lock()
+	defer w.publisherMutex.Unlock()
+	publisher, err := w.createPublisherLocked()
 	if err != nil {
 		return err
 	}
@@ -69,7 +74,9 @@ func (w *Worker) PublishTopicWithContext(ctx context.Context, data []byte, excha
 		return fmt.Errorf("routing key must be provided")
 	}
 
-	publisher, err := w.createPublisher()
+	w.publisherMutex.Lock()
+	defer w.publisherMutex.Unlock()
+	publisher, err := w.createPublisherLocked()
 	if err != nil {
 		return err
 	}

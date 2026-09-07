@@ -2,12 +2,44 @@ package systemeventslisten
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
 )
+
+func TestEventUnmarshalJSONParsesUnixTimestamps(t *testing.T) {
+	tests := []struct {
+		name string
+		data string
+		want time.Time
+	}{
+		{
+			name: "seconds",
+			data: `{"created_at":1710000000}`,
+			want: time.Unix(1710000000, 0),
+		},
+		{
+			name: "milliseconds",
+			data: `{"created_at":1710000000000}`,
+			want: time.UnixMilli(1710000000000),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var event Event
+			if err := json.Unmarshal([]byte(tt.data), &event); err != nil {
+				t.Fatalf("json.Unmarshal() error = %v", err)
+			}
+			if !event.CreatedAt.Equal(tt.want) {
+				t.Errorf("CreatedAt = %v, want %v", event.CreatedAt, tt.want)
+			}
+		})
+	}
+}
 
 func TestPushClientSendEventRetriesTransientFailures(t *testing.T) {
 	var attempts atomic.Int32

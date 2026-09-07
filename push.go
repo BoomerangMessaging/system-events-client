@@ -113,15 +113,13 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 		}
 	}
 
-	var unixSeconds int64
-	if err := json.Unmarshal(aux.CreatedAt, &unixSeconds); err == nil {
-		e.CreatedAt = time.Unix(unixSeconds, 0)
-		return nil
-	}
-
-	var unixMilliseconds int64
-	if err := json.Unmarshal(aux.CreatedAt, &unixMilliseconds); err == nil && unixMilliseconds > 1e12 {
-		e.CreatedAt = time.UnixMilli(unixMilliseconds)
+	var unixTimestamp int64
+	if err := json.Unmarshal(aux.CreatedAt, &unixTimestamp); err == nil {
+		if unixTimestamp > 1e12 {
+			e.CreatedAt = time.UnixMilli(unixTimestamp)
+		} else {
+			e.CreatedAt = time.Unix(unixTimestamp, 0)
+		}
 		return nil
 	}
 
