@@ -31,7 +31,13 @@ type Event struct {
 	Level   string          `json:"level"`
 	Message json.RawMessage `json:"message"`
 	// if CountMinutes > 0, defines the time frame in minutes for counting
-	CountMinutes int `json:"count_minutes"`
+	CountMinutes int      `json:"count_minutes"`
+	Channels     []string `json:"channels"`
+	DoNotStore   bool     `json:"do_not_store"`
+	// event is addressed to this email
+	Email string `json:"email"`
+	// front-end or source of the event
+	Info string `json:"info"`
 }
 
 func (e *Event) GenerateUniqueKey() {
