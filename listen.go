@@ -13,7 +13,6 @@ type Worker struct {
 	publisher      *rabbitmq.Publisher
 	publisherMutex sync.Mutex
 	closed         bool
-	exchange       string
 }
 
 // Close consumer and connection.
@@ -52,7 +51,6 @@ func (w *Worker) Run(handler func(d rabbitmq.Delivery) rabbitmq.Action) error {
 }
 
 func (worker *Worker) createConsumer(workerName, exchange string, routingKeys []string, concurrency int) (err error) {
-	worker.exchange = exchange
 	opts := []func(*rabbitmq.ConsumerOptions){
 		rabbitmq.WithConsumerOptionsQueueDurable,
 		rabbitmq.WithConsumerOptionsConsumerName("system-events-listen-" + workerName),
